@@ -23,7 +23,7 @@ SCHEMA_PATH = PACKAGE_DIR / "schema.sql"
 # --- Data generation ------------------------------------------------------
 RANDOM_SEED = 42             # fixed seed -> the same demo data every time
 DAYS_IN_PAST = 45            # historical flights generated before "today"
-DAYS_IN_FUTURE = 30          # future flights available for booking
+DAYS_IN_FUTURE = 90          # future flights available for booking
 FLIGHTS_PER_DAY = 4          # rotations per day (each = outbound + return)
 NUM_CUSTOMERS = 900
 

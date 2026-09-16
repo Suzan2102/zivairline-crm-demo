@@ -408,8 +408,11 @@ def build_bookings(
                 if candidates:
                     legs.append(rng.choice(candidates))
 
-            cabin = _pick_cabin(rng, customer)
             booking_dt = _booking_date(rng, flight["_departure_dt"], customer, now)
+            if booking_dt is None:
+                continue  # not booked yet, or not a customer back then
+
+            cabin = _pick_cabin(rng, customer)
             channel = _pick_channel(rng, customer)
             agent_id = (
                 rng.choice(agent_ids)
@@ -511,12 +514,23 @@ def _pick_channel(rng: random.Random, customer: dict) -> str:
     return rng.choices(config.BOOKING_CHANNELS, weights=[42, 28, 15, 10, 5], k=1)[0]
 
 
-def _booking_date(rng: random.Random, departure: datetime, customer: dict, now: datetime) -> datetime:
+def _booking_date(rng: random.Random, departure: datetime, customer: dict,
+                  now: datetime) -> datetime | None:
+    """
+    When this passenger booked - or None if they have not booked yet.
+
+    Returning None is what produces the booking curve: a passenger whose draw
+    lands in the future simply has not walked into the agency yet, so a flight
+    three months out ends up only lightly sold. Clamping the date to "now"
+    instead would pile every one of those bookings onto today.
+    """
     lead = int(rng.triangular(1, 150, 28))
     booked = departure - timedelta(days=lead, hours=rng.randint(0, 23))
-    member_since = datetime.strptime(customer["member_since"], DATE_FMT)
-    earliest = max(member_since, now - timedelta(days=config.DAYS_IN_PAST + 160))
-    return max(min(booked, now), earliest)
+    if booked > now:
+        return None
+    if booked < datetime.strptime(customer["member_since"], DATE_FMT):
+        return None  # they were not a customer of ours yet
+    return booked
 
 
 def _lead_time_multiplier(days_before_departure: int) -> float:
