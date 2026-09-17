@@ -273,3 +273,134 @@ def data_window() -> dict:
         "       COUNT(*) AS flights FROM flights"
     )
     return dict(row) if row else {}
+
+
+# --------------------------------------------------------------------------
+# Flights module (Phase 3)
+# --------------------------------------------------------------------------
+@st.cache_data(ttl=CACHE_TTL)
+def route_options() -> pd.DataFrame:
+    """Every route, labelled for a dropdown."""
+    return query_df(
+        """
+        SELECT r.route_id,
+               r.origin_iata || ' -> ' || r.destination_iata || '  (' || d.city || ')' AS label
+        FROM routes r
+        JOIN airports d ON d.iata = r.destination_iata
+        ORDER BY label
+        """
+    )
+
+
+@st.cache_data(ttl=CACHE_TTL)
+def list_flights(
+    start_date: str,
+    end_date: str,
+    statuses: tuple[str, ...] = (),
+    route_id: str | None = None,
+    flight_number: str | None = None,
+    limit: int = 800,
+) -> pd.DataFrame:
+    """
+    The flight board, filtered.
+
+    The WHERE clause is assembled from whichever filters the agent actually set.
+    Note that every value still goes in as a bound parameter - the only thing
+    built by string concatenation is the number of '?' placeholders, never a
+    value. That is what keeps this safe from SQL injection.
+    """
+    where = ["date(f.departure_time) BETWEEN ? AND ?"]
+    params: list = [start_date, end_date]
+
+    if statuses:
+        where.append(f"f.status IN ({','.join('?' * len(statuses))})")
+        params.extend(statuses)
+    if route_id:
+        where.append("f.route_id = ?")
+        params.append(route_id)
+    if flight_number:
+        where.append("f.flight_number LIKE ?")
+        params.append(f"%{flight_number.strip().upper()}%")
+
+    params.append(limit)
+    return query_df(
+        f"""
+        SELECT f.flight_id,
+               f.flight_number,
+               r.origin_iata || ' -> ' || r.destination_iata AS leg,
+               d.city AS destination,
+               date(f.departure_time) AS flight_date,
+               substr(f.departure_time, 12, 5) AS departs,
+               substr(f.arrival_time, 12, 5)   AS arrives,
+               f.status,
+               f.delay_minutes,
+               f.gate,
+               a.model AS aircraft,
+               f.seats_total,
+               f.seats_sold,
+               ROUND(100.0 * f.seats_sold / f.seats_total, 1) AS load_factor,
+               (SELECT COUNT(*) FROM tickets t
+                 WHERE t.flight_id = f.flight_id
+                   AND (t.status <> 'Cancelled' OR f.status = 'Cancelled')) AS our_passengers
+        {FLIGHT_JOIN}
+        WHERE {' AND '.join(where)}
+        ORDER BY f.departure_time
+        LIMIT ?
+        """,
+        params,
+    )
+
+
+@st.cache_data(ttl=CACHE_TTL)
+def flight_detail(flight_id: str) -> dict:
+    """Everything known about one flight, for the detail card."""
+    row = query_one(
+        f"""
+        SELECT f.flight_id, f.flight_number, f.departure_time, f.arrival_time,
+               f.status, f.delay_minutes, f.gate, f.seats_total, f.seats_sold,
+               f.base_fare, f.tail_number,
+               r.route_id, r.origin_iata, r.destination_iata,
+               r.distance_km, r.duration_minutes,
+               o.city AS origin_city, o.name AS origin_name,
+               d.city AS destination_city, d.name AS destination_name, d.country,
+               a.model AS aircraft, a.body_type, a.year_built,
+               a.seats_economy, a.seats_business
+        {FLIGHT_JOIN}
+        WHERE f.flight_id = ?
+        """,
+        (flight_id,),
+    )
+    return dict(row) if row else {}
+
+
+@st.cache_data(ttl=CACHE_TTL)
+def flight_manifest(flight_id: str) -> pd.DataFrame:
+    """
+    Who this agency has on board. Seats sort numerically: CAST('12A' AS INTEGER)
+    is 12, so row 2 comes before row 12 instead of after it.
+    """
+    return query_df(
+        """
+        SELECT t.ticket_id,
+               t.seat,
+               t.cabin,
+               c.first_name || ' ' || c.last_name AS passenger,
+               c.customer_id,
+               c.loyalty_tier,
+               c.segment,
+               c.passport_number,
+               b.booking_id,
+               b.channel,
+               t.baggage_count,
+               t.checked_in,
+               t.status,
+               t.fare
+        FROM tickets t
+        JOIN bookings  b ON b.booking_id = t.booking_id
+        JOIN customers c ON c.customer_id = b.customer_id
+        WHERE t.flight_id = ?
+        ORDER BY CASE t.cabin WHEN 'Business' THEN 0 ELSE 1 END,
+                 CAST(t.seat AS INTEGER), t.seat
+        """,
+        (flight_id,),
+    )

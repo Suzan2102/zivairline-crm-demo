@@ -11,16 +11,6 @@ import streamlit as st
 from . import theme as t
 
 _PLANNED = {
-    "Flights": (
-        3,
-        "Flight tracking",
-        [
-            "Flight board with filters on date range, route and status",
-            "Search by flight number",
-            "Flight card: aircraft, gate, delay, load factor",
-            "Passenger manifest with seat, cabin and check-in state",
-        ],
-    ),
     "Customers": (
         4,
         "Customer management",
@@ -60,11 +50,7 @@ def _render(name: str) -> None:
     st.info(f"**{name}** arrives in Phase {phase}. Planned scope:")
     for b in bullets:
         st.markdown(f"- {b}")
-    st.caption("Phase 2 delivers the query layer, the app shell and the dashboard.")
-
-
-def flights() -> None:
-    _render("Flights")
+    st.caption("Dashboard and Flights are already built - try them from the sidebar.")
 
 
 def customers() -> None:

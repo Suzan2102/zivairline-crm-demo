@@ -26,7 +26,7 @@ handle the bookings that connect the two. Built with **Streamlit** on top of a
 | Area | Question it answers | Status |
 |------|---------------------|--------|
 | **Dashboard** | How is the airline doing right now? Load factor, revenue, flight status, open service cases, today's departures, disruptions. | ✅ Built |
-| **Flights** | Which flights are scheduled, delayed or cancelled — and who is on board? | Phase 3 |
+| **Flights** | Which flights are scheduled, delayed or cancelled — and who is on board? | ✅ Built |
 | **Customers** | Who is this passenger, what is their history and how valuable are they? | Phase 4 |
 | **Bookings** | Book a customer onto a flight, change a seat, check them in, cancel a trip. | Phase 5 |
 | **Reports** | Revenue by route, channel mix, loyalty distribution, agent performance. | Phase 6 |
@@ -77,6 +77,7 @@ crm/
     └── ui/
         ├── theme.py          # palette, CSS, KPI tiles, chart styling
         ├── dashboard.py      # the Dashboard screen
+        ├── flights.py        # the Flights screen: board, filters, manifest
         └── placeholders.py   # the screens still on the roadmap
 ```
 
@@ -170,7 +171,7 @@ validated against that surface.
 |-------|-------|--------|
 | 1 | Data model, synthetic data generator, documentation | ✅ Done |
 | 2 | Query layer, app shell, Dashboard | ✅ Done |
-| 3 | Flights module + passenger manifest | ⬜ |
+| 3 | Flights module + passenger manifest | ✅ Done |
 | 4 | Customers module + 360° customer card | ⬜ |
 | 5 | Bookings module (create / change / check-in / cancel) | ⬜ |
 | 6 | Reports, polish, final documentation | ⬜ |

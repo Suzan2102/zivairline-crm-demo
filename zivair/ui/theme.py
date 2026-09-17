@@ -135,6 +135,18 @@ def inject_css() -> None:
         .zv-row.serious  {{ border-left-color: {SERIOUS}; }}
         .zv-row.warning  {{ border-left-color: {WARNING}; }}
 
+        /* ---- fact grid (detail cards) ---- */
+        .zv-facts {{
+            display: flex; flex-wrap: wrap; gap: .85rem 2.2rem;
+            background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 12px;
+            padding: .9rem 1.15rem; margin-bottom: .6rem;
+        }}
+        .zv-facts .k {{
+            color: {MUTED}; font-size: .68rem; font-weight: 600;
+            letter-spacing: .05em; text-transform: uppercase;
+        }}
+        .zv-facts .v {{ color: {INK}; font-size: .95rem; font-weight: 600; margin-top: .12rem; }}
+
         /* ---- empty state ---- */
         .zv-empty {{
             color: {MUTED}; font-size: .85rem; text-align: center;
@@ -197,6 +209,15 @@ def alert_row(title: str, meta: str, level: str = "warning") -> None:
         f'<div class="meta">{meta}</div></div>',
         unsafe_allow_html=True,
     )
+
+
+def fact_grid(facts: list[tuple[str, str]]) -> None:
+    """A row of label/value pairs - the header of a detail card."""
+    cells = "".join(
+        f'<div class="fact"><div class="k">{k}</div><div class="v">{v}</div></div>'
+        for k, v in facts
+    )
+    st.markdown(f'<div class="zv-facts">{cells}</div>', unsafe_allow_html=True)
 
 
 def empty_state(message: str) -> None:

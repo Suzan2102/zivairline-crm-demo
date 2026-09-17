@@ -107,7 +107,7 @@ def _revenue_trend() -> None:
         hover="<b>%{x|%d %b}</b><br>$%{y:,.0f}",
         height=268,
     )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
 def _status_breakdown() -> None:
@@ -117,7 +117,7 @@ def _status_breakdown() -> None:
         t.empty_state("No flights on file.")
         return
     fig = t.status_bar(df, "status", "flights", t.FLIGHT_STATUS_COLOR, height=268)
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
 def _top_routes() -> None:
@@ -127,7 +127,7 @@ def _top_routes() -> None:
         t.empty_state("No ticket revenue yet.")
         return
     fig = t.ranked_bar(df, "leg", "revenue", lambda v: f"${v:,.0f}", height=270)
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
 def _channel_mix() -> None:
@@ -138,7 +138,7 @@ def _channel_mix() -> None:
         return
     fig = t.ranked_bar(df, "channel", "revenue", lambda v: f"${v:,.0f}",
                        color=t.SERIES[1], height=270)
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
 # --------------------------------------------------------------------------
@@ -156,7 +156,7 @@ def _departure_board() -> None:
     st.dataframe(
         board,
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         height=360,
         column_config={
             "flight_number": st.column_config.TextColumn("Flight", width="small"),
