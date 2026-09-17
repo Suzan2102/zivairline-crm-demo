@@ -26,7 +26,7 @@ import sqlite3
 import string
 from datetime import datetime, timedelta
 
-from . import config
+from . import config, rules
 from .database import connect, init_schema, table_counts
 from .reference_data import (
     AGENTS,
@@ -41,13 +41,9 @@ from .reference_data import (
 DT_FMT = "%Y-%m-%d %H:%M"
 DATE_FMT = "%Y-%m-%d"
 
-# Fare multipliers by cabin, and the surcharge applied to last-minute bookings.
-CABIN_MULTIPLIER = {"Economy": 1.0, "Business": 3.2}
-TIER_DISCOUNT = {"Basic": 1.00, "Silver": 0.97, "Gold": 0.94, "Platinum": 0.90}
-BAGGAGE_FEE = 35.0
-
-# Loyalty tier thresholds (points earned on flown tickets + legacy balance).
-TIER_THRESHOLDS = [("Platinum", 30000), ("Gold", 16000), ("Silver", 7500), ("Basic", 0)]
+# Pricing and loyalty come from zivair/rules.py, so the demo data obeys exactly
+# the same rules the booking screen will apply.
+BAGGAGE_FEE = rules.BAGGAGE_FEE
 
 
 # ---------------------------------------------------------------- helpers --
@@ -82,13 +78,6 @@ def _seat_map(seats_economy: int, seats_business: int) -> dict[str, list[str]]:
     ][:seats_economy]
 
     return {"Business": business, "Economy": economy}
-
-
-def _tier_for_points(points: int) -> str:
-    for tier, threshold in TIER_THRESHOLDS:
-        if points >= threshold:
-            return tier
-    return "Basic"
 
 
 # ------------------------------------------------------------ master data --
@@ -433,11 +422,8 @@ def build_bookings(
 
                 ticket_seq += 1
                 lead_days = max((leg["_departure_dt"] - booking_dt).days, 0)
-                fare = (
-                    leg["base_fare"]
-                    * CABIN_MULTIPLIER[cabin]
-                    * _lead_time_multiplier(lead_days)
-                    * TIER_DISCOUNT[customer["loyalty_tier"]]
+                fare = rules.quote_fare(
+                    leg["base_fare"], cabin, lead_days, customer["loyalty_tier"]
                 )
                 status = _ticket_status(rng, leg, now)
                 booking_tickets.append(
@@ -447,7 +433,7 @@ def build_bookings(
                         "flight_id": leg["flight_id"],
                         "cabin": cabin,
                         "seat": seat,
-                        "fare": round(fare, 2),
+                        "fare": fare,
                         "baggage_count": rng.choices([0, 1, 2], weights=[25, 55, 20], k=1)[0],
                         "checked_in": 1 if status == "Flown" or leg["status"] == "Boarding" else 0,
                         "status": status,
@@ -531,19 +517,6 @@ def _booking_date(rng: random.Random, departure: datetime, customer: dict,
     if booked < datetime.strptime(customer["member_since"], DATE_FMT):
         return None  # they were not a customer of ours yet
     return booked
-
-
-def _lead_time_multiplier(days_before_departure: int) -> float:
-    """Buy early, pay less - the classic airline revenue curve."""
-    if days_before_departure >= 90:
-        return 0.82
-    if days_before_departure >= 45:
-        return 0.90
-    if days_before_departure >= 21:
-        return 1.00
-    if days_before_departure >= 7:
-        return 1.18
-    return 1.45
 
 
 def _ticket_status(rng: random.Random, flight: dict, now: datetime) -> str:
@@ -635,14 +608,13 @@ def apply_loyalty(conn: sqlite3.Connection, rng: random.Random,
         customer_id = customer_by_booking.get(t["booking_id"])
         if customer_id is None:
             continue
-        multiplier = 2.0 if t["cabin"] == "Business" else 1.0
-        points[customer_id] += int(t["_distance"] * multiplier / 2)
+        points[customer_id] += rules.points_for_flight(t["_distance"], t["cabin"])
 
     updates = []
     for c in customers:
         legacy = int(rng.triangular(0, 5000, 400))
         total = points[c["customer_id"]] + legacy
-        updates.append((total, _tier_for_points(total), c["customer_id"]))
+        updates.append((total, rules.tier_for_points(total), c["customer_id"]))
 
     conn.executemany(
         "UPDATE customers SET loyalty_points = ?, loyalty_tier = ? WHERE customer_id = ?",

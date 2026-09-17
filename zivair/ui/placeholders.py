@@ -11,16 +11,6 @@ import streamlit as st
 from . import theme as t
 
 _PLANNED = {
-    "Customers": (
-        4,
-        "Customer management",
-        [
-            "Search by name, email or customer id",
-            "Filter by loyalty tier, segment and country",
-            "360 degree customer card: value, loyalty, history",
-            "Service log per customer, add and edit customers",
-        ],
-    ),
     "Bookings": (
         5,
         "Booking management",
@@ -50,11 +40,7 @@ def _render(name: str) -> None:
     st.info(f"**{name}** arrives in Phase {phase}. Planned scope:")
     for b in bullets:
         st.markdown(f"- {b}")
-    st.caption("Dashboard and Flights are already built - try them from the sidebar.")
-
-
-def customers() -> None:
-    _render("Customers")
+    st.caption("Dashboard, Flights and Customers are already built - try them from the sidebar.")
 
 
 def bookings() -> None:

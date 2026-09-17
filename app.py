@@ -13,7 +13,7 @@ import streamlit as st
 
 from zivair import config
 from zivair.database import database_exists
-from zivair.ui import dashboard, flights, placeholders, theme
+from zivair.ui import customers, dashboard, flights, placeholders, theme
 
 st.set_page_config(
     page_title=config.APP_NAME,
@@ -63,7 +63,7 @@ def main() -> None:
     pages = [
         st.Page(dashboard.render, title="Dashboard", icon=":material/dashboard:", default=True),
         st.Page(flights.render, title="Flights", icon=":material/flight:"),
-        st.Page(placeholders.customers, title="Customers", icon=":material/group:"),
+        st.Page(customers.render, title="Customers", icon=":material/group:"),
         st.Page(placeholders.bookings, title="Bookings", icon=":material/confirmation_number:"),
         st.Page(placeholders.reports, title="Reports", icon=":material/bar_chart:"),
     ]

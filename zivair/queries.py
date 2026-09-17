@@ -17,7 +17,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from .database import query_df, query_one
+from . import rules
+from .database import execute, query_df, query_one
 
 CACHE_TTL = 60  # seconds
 
@@ -404,3 +405,222 @@ def flight_manifest(flight_id: str) -> pd.DataFrame:
         """,
         (flight_id,),
     )
+
+
+# --------------------------------------------------------------------------
+# Customers module (Phase 4)
+# --------------------------------------------------------------------------
+# Every customer row carries the same three aggregates, so the SELECT list is
+# written once here instead of being retyped in each query.
+CUSTOMER_AGGREGATES = """
+    (SELECT COUNT(*) FROM bookings b
+       WHERE b.customer_id = c.customer_id AND b.status <> 'Cancelled')      AS bookings,
+    (SELECT COALESCE(SUM(b.total_amount), 0) FROM bookings b
+       WHERE b.customer_id = c.customer_id AND b.status <> 'Cancelled')      AS lifetime_value,
+    (SELECT COUNT(*) FROM tickets t
+       JOIN bookings b ON b.booking_id = t.booking_id
+      WHERE b.customer_id = c.customer_id AND t.status = 'Flown')            AS flights_flown
+"""
+
+
+@st.cache_data(ttl=CACHE_TTL)
+def country_options() -> list[str]:
+    return query_df("SELECT DISTINCT country FROM customers ORDER BY country")["country"].tolist()
+
+
+@st.cache_data(ttl=CACHE_TTL)
+def list_customers(
+    search: str | None = None,
+    tiers: tuple[str, ...] = (),
+    segments: tuple[str, ...] = (),
+    countries: tuple[str, ...] = (),
+    limit: int = 300,
+) -> pd.DataFrame:
+    """The customer list, filtered. Most valuable customer first."""
+    where: list[str] = []
+    params: list = []
+
+    if search:
+        term = f"%{search.strip()}%"
+        where.append(
+            "(c.first_name || ' ' || c.last_name LIKE ? OR c.email LIKE ? "
+            " OR c.customer_id LIKE ? OR c.phone LIKE ?)"
+        )
+        params.extend([term, term, term, term])
+
+    for column, values in (("c.loyalty_tier", tiers), ("c.segment", segments),
+                           ("c.country", countries)):
+        if values:
+            where.append(f"{column} IN ({','.join('?' * len(values))})")
+            params.extend(values)
+
+    clause = f"WHERE {' AND '.join(where)}" if where else ""
+    params.append(limit)
+
+    return query_df(
+        f"""
+        SELECT c.customer_id,
+               c.first_name || ' ' || c.last_name AS name,
+               c.email, c.phone, c.country, c.city,
+               c.loyalty_tier, c.loyalty_points, c.segment, c.member_since,
+               {CUSTOMER_AGGREGATES}
+        FROM customers c
+        {clause}
+        ORDER BY lifetime_value DESC
+        LIMIT ?
+        """,
+        params,
+    )
+
+
+@st.cache_data(ttl=CACHE_TTL)
+def customer_profile(customer_id: str) -> dict:
+    """One customer, with everything the 360 card shows."""
+    row = query_one(
+        f"""
+        SELECT c.*,
+               c.first_name || ' ' || c.last_name AS name,
+               {CUSTOMER_AGGREGATES},
+               (SELECT COUNT(*) FROM interactions i
+                  WHERE i.customer_id = c.customer_id
+                    AND i.status IN ('Open','In Progress'))                  AS open_cases,
+               (SELECT MAX(f.departure_time) FROM tickets t
+                  JOIN bookings b ON b.booking_id = t.booking_id
+                  JOIN flights  f ON f.flight_id = t.flight_id
+                 WHERE b.customer_id = c.customer_id AND t.status = 'Flown') AS last_flight,
+               (SELECT MIN(f.departure_time) FROM tickets t
+                  JOIN bookings b ON b.booking_id = t.booking_id
+                  JOIN flights  f ON f.flight_id = t.flight_id
+                 WHERE b.customer_id = c.customer_id
+                   AND t.status = 'Confirmed'
+                   AND f.departure_time > {NOW})                             AS next_flight
+        FROM customers c
+        WHERE c.customer_id = ?
+        """,
+        (customer_id,),
+    )
+    return dict(row) if row else {}
+
+
+@st.cache_data(ttl=CACHE_TTL)
+def customer_flights(customer_id: str) -> pd.DataFrame:
+    """Flight history, newest first."""
+    return query_df(
+        """
+        SELECT f.departure_time,
+               f.flight_number,
+               r.origin_iata || ' -> ' || r.destination_iata AS leg,
+               d.city AS destination,
+               r.distance_km,
+               t.cabin, t.seat, t.fare, t.checked_in,
+               t.status AS ticket_status,
+               f.status AS flight_status,
+               b.booking_id
+        FROM tickets  t
+        JOIN bookings b ON b.booking_id = t.booking_id
+        JOIN flights  f ON f.flight_id = t.flight_id
+        JOIN routes   r ON r.route_id = f.route_id
+        JOIN airports d ON d.iata = r.destination_iata
+        WHERE b.customer_id = ?
+        ORDER BY f.departure_time DESC
+        """,
+        (customer_id,),
+    )
+
+
+@st.cache_data(ttl=CACHE_TTL)
+def customer_bookings(customer_id: str) -> pd.DataFrame:
+    """Booking history, newest first."""
+    return query_df(
+        """
+        SELECT b.booking_id, b.booking_date, b.channel, b.status, b.payment_status,
+               b.total_amount, b.notes,
+               COALESCE(ag.full_name, 'Self service') AS agent,
+               (SELECT COUNT(*) FROM tickets t WHERE t.booking_id = b.booking_id) AS tickets
+        FROM bookings b
+        LEFT JOIN agents ag ON ag.agent_id = b.agent_id
+        WHERE b.customer_id = ?
+        ORDER BY b.booking_date DESC
+        """,
+        (customer_id,),
+    )
+
+
+@st.cache_data(ttl=CACHE_TTL)
+def customer_interactions(customer_id: str) -> pd.DataFrame:
+    """The service log for one customer."""
+    return query_df(
+        """
+        SELECT i.created_at, i.channel, i.topic, i.subject, i.priority, i.status,
+               i.resolved_at, i.booking_id, ag.full_name AS agent
+        FROM interactions i
+        JOIN agents ag ON ag.agent_id = i.agent_id
+        WHERE i.customer_id = ?
+        ORDER BY i.created_at DESC
+        """,
+        (customer_id,),
+    )
+
+
+# --------------------------------------------------------------------------
+# Writes
+# --------------------------------------------------------------------------
+# Writes are never cached, and every one of them clears the read caches. A
+# screen that saves a row and then reads a stale list is the classic bug here.
+def email_taken(email: str, exclude_customer_id: str | None = None) -> bool:
+    """The database enforces this too; checking first lets us show a clean error."""
+    row = query_one(
+        "SELECT customer_id FROM customers "
+        " WHERE lower(email) = lower(?) AND customer_id <> COALESCE(?, '')",
+        (email, exclude_customer_id),
+    )
+    return row is not None
+
+
+def next_customer_id() -> str:
+    """CU-00001, CU-00002, ... - the next free number."""
+    row = query_one("SELECT MAX(CAST(substr(customer_id, 4) AS INTEGER)) AS n FROM customers")
+    return f"CU-{((row['n'] or 0) + 1):05d}"
+
+
+def create_customer(data: dict) -> str:
+    """Insert a customer and return the new id. The tier follows the points (BR-6)."""
+    customer_id = next_customer_id()
+    execute(
+        """
+        INSERT INTO customers (customer_id, first_name, last_name, email, phone,
+                               birth_date, country, city, passport_number,
+                               loyalty_tier, loyalty_points, member_since,
+                               segment, marketing_optin)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            customer_id, data["first_name"], data["last_name"], data["email"],
+            data["phone"], data["birth_date"], data["country"], data["city"],
+            data["passport_number"], rules.tier_for_points(data["loyalty_points"]),
+            data["loyalty_points"], data["member_since"], data["segment"],
+            int(data["marketing_optin"]),
+        ),
+    )
+    clear_caches()
+    return customer_id
+
+
+def update_customer(customer_id: str, data: dict) -> None:
+    execute(
+        """
+        UPDATE customers
+           SET first_name = ?, last_name = ?, email = ?, phone = ?, birth_date = ?,
+               country = ?, city = ?, passport_number = ?, segment = ?,
+               loyalty_points = ?, loyalty_tier = ?, marketing_optin = ?
+         WHERE customer_id = ?
+        """,
+        (
+            data["first_name"], data["last_name"], data["email"], data["phone"],
+            data["birth_date"], data["country"], data["city"], data["passport_number"],
+            data["segment"], data["loyalty_points"],
+            rules.tier_for_points(data["loyalty_points"]), int(data["marketing_optin"]),
+            customer_id,
+        ),
+    )
+    clear_caches()

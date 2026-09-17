@@ -31,6 +31,7 @@ NUM_CUSTOMERS = 900
 # Kept as constants so the UI and the generator can never drift apart.
 CABINS = ["Economy", "Business"]
 LOYALTY_TIERS = ["Basic", "Silver", "Gold", "Platinum"]
+CUSTOMER_SEGMENTS = ["Leisure", "Business", "VIP"]
 BOOKING_CHANNELS = ["Website", "Mobile App", "Travel Agent", "Call Center", "Partner"]
 BOOKING_STATUSES = ["Confirmed", "Completed", "Cancelled"]
 TICKET_STATUSES = ["Confirmed", "Flown", "Cancelled"]

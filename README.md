@@ -27,7 +27,7 @@ handle the bookings that connect the two. Built with **Streamlit** on top of a
 |------|---------------------|--------|
 | **Dashboard** | How is the airline doing right now? Load factor, revenue, flight status, open service cases, today's departures, disruptions. | ✅ Built |
 | **Flights** | Which flights are scheduled, delayed or cancelled — and who is on board? | ✅ Built |
-| **Customers** | Who is this passenger, what is their history and how valuable are they? | Phase 4 |
+| **Customers** | Who is this passenger, what is their history and how valuable are they? | ✅ Built |
 | **Bookings** | Book a customer onto a flight, change a seat, check them in, cancel a trip. | Phase 5 |
 | **Reports** | Revenue by route, channel mix, loyalty distribution, agent performance. | Phase 6 |
 
@@ -73,11 +73,13 @@ crm/
     ├── database.py           # connection + query helpers (no domain logic)
     ├── reference_data.py     # airports, fleet, agents, name pools
     ├── seed_data.py          # the synthetic data generator
-    ├── queries.py            # every question the UI asks the database
+    ├── rules.py              # business rules: pricing, loyalty tiers, bookability
+    ├── queries.py            # every question the UI asks the database, plus the writes
     └── ui/
         ├── theme.py          # palette, CSS, KPI tiles, chart styling
         ├── dashboard.py      # the Dashboard screen
         ├── flights.py        # the Flights screen: board, filters, manifest
+        ├── customers.py      # the Customers screen: search, 360 card, add/edit
         └── placeholders.py   # the screens still on the roadmap
 ```
 
@@ -95,6 +97,11 @@ Streamlit UI (app.py, ui/)   screens, forms, charts
 
 Each layer only knows the one below it: `database.py` has never heard of a flight,
 and `dashboard.py` never writes SQL.
+
+`rules.py` sits beside them and holds the decisions the airline made — what a fare
+costs, when a passenger becomes Gold, whether a flight can still be booked. The
+generator and the screens both import it, so the demo data and the booking form can
+never disagree about a price or a tier.
 
 ---
 
@@ -172,7 +179,7 @@ validated against that surface.
 | 1 | Data model, synthetic data generator, documentation | ✅ Done |
 | 2 | Query layer, app shell, Dashboard | ✅ Done |
 | 3 | Flights module + passenger manifest | ✅ Done |
-| 4 | Customers module + 360° customer card | ⬜ |
+| 4 | Customers module + 360° customer card | ✅ Done |
 | 5 | Bookings module (create / change / check-in / cancel) | ⬜ |
 | 6 | Reports, polish, final documentation | ⬜ |
 
