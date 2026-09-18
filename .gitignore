@@ -1,0 +1,17 @@
+# Supabase CLI local state (holds the linked project ref and temp files)
+supabase/.temp/
+supabase/.branches/
+
+# Secrets — never commit. The publishable key in web/config.js is safe and
+# intentionally tracked; service_role and secret keys belong only here.
+.env
+.env.*
+!.env.example
+
+# Skill symlinks created per-machine by `npx skills add`; the real files live
+# in .agents/skills/ and are tracked.
+.claude/skills/
+
+node_modules/
+Thumbs.db
+.DS_Store

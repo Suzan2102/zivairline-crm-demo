@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>CRM טיסות</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ===== login gate ===== -->
+  <div class="gate" id="gate" hidden>
+    <form class="card" id="login-form">
+      <h2>CRM טיסות</h2>
+      <p class="card-sub">התחברות נדרשת לצפייה בנתונים</p>
+
+      <label for="email">אימייל</label>
+      <input type="email" id="email" required autocomplete="username" dir="ltr">
+
+      <label for="password">סיסמה</label>
+      <input type="password" id="password" required autocomplete="current-password" dir="ltr">
+
+      <p class="form-msg" id="login-msg" hidden></p>
+
+      <button type="submit" class="btn" id="login-btn">כניסה</button>
+      <button type="button" class="btn-link" id="signup-btn">יצירת משתמש חדש</button>
+    </form>
+  </div>
+
+  <!-- ===== app ===== -->
+  <div id="app" hidden>
+
+    <header class="topbar">
+      <div class="wrap">
+        <h1>CRM טיסות</h1>
+        <div class="topbar-end">
+          <span class="badge" id="conn">מתחבר…</span>
+          <span class="user" id="user-email"></span>
+          <button class="btn-link" id="logout-btn">יציאה</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="wrap">
+
+      <section class="stats">
+        <div class="stat"><span class="stat-num" id="stat-customers">—</span><span class="stat-label">לקוחות</span></div>
+        <div class="stat"><span class="stat-num" id="stat-flights">—</span><span class="stat-label">טיסות</span></div>
+        <div class="stat"><span class="stat-num" id="stat-bookings">—</span><span class="stat-label">הזמנות</span></div>
+        <div class="stat"><span class="stat-num" id="stat-confirmed">—</span><span class="stat-label">מאושרות</span></div>
+      </section>
+
+      <div id="alert" class="alert" hidden></div>
+
+      <nav class="tabs" role="tablist">
+        <button class="tab is-active" data-view="customers" role="tab">לקוחות</button>
+        <button class="tab" data-view="flights"   role="tab">טיסות</button>
+        <button class="tab" data-view="bookings"  role="tab">הזמנות</button>
+      </nav>
+
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="חיפוש…" autocomplete="off">
+        <span class="count" id="count"></span>
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <thead id="thead"></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <p class="empty" id="empty" hidden></p>
+
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
