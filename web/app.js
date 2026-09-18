@@ -14,6 +14,12 @@ const esc = (v) =>
 const fmtDate = (iso) =>
   iso ? new Date(iso).toLocaleString("he-IL", { dateStyle: "short", timeStyle: "short" }) : "—";
 
+const fmtTime = (iso) =>
+  iso ? new Date(iso).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) : "--:--";
+
+const fmtDay = (iso) =>
+  iso ? new Date(iso).toLocaleDateString("he-IL", { day: "2-digit", month: "short" }) : "";
+
 const STATUS_HE = { confirmed: "מאושר", pending: "ממתין", cancelled: "בוטל" };
 
 function showAlert(html, bad = false) {
@@ -61,148 +67,106 @@ async function signIn(e) {
 
 const signOut = () => db.auth.signOut();
 
-/* ---------- views ---------- */
+/* ============================================================
+   THE DIGITAL BOARD — the dashboard's centrepiece
+   ============================================================ */
 
-const VIEWS = {
-  customers: {
-    from: "customers",
-    select: "id, name, email",
-    order: { column: "id" },
-    head: ["#", "שם", "אימייל"],
-    search: (r, q) =>
-      (r.name || "").toLowerCase().includes(q) || (r.email || "").toLowerCase().includes(q),
-    row: (r) => `
-      <td class="num">${r.id}</td>
-      <td>${esc(r.name)}</td>
-      <td class="ltr">${r.email ? esc(r.email) : '<span class="dim">—</span>'}</td>`
-  },
+let clockTimer = null;
 
-  flights: {
-    from: "flights",
-    select: "id, flight_number, origin, destination, departure_time, arrival_time",
-    order: { column: "departure_time" },
-    head: ["טיסה", "מסלול", "המראה", "נחיתה"],
-    search: (r, q) =>
-      `${r.flight_number} ${r.origin} ${r.destination}`.toLowerCase().includes(q),
-    row: (r) => `
-      <td class="ltr">${esc(r.flight_number)}</td>
-      <td class="ltr">${esc(r.origin)} ← ${esc(r.destination)}</td>
-      <td>${fmtDate(r.departure_time)}</td>
-      <td>${fmtDate(r.arrival_time)}</td>`
-  },
+/* onAuthStateChange and the initial getSession can both resolve, so loadBoard
+   may be in flight more than once. Each run clears the list then awaits, so
+   without a guard three overlapping runs all clear early and all append —
+   showing every flight three times. Newest run wins; older ones bail. */
+let boardSeq = 0;
 
-  bookings: {
-    from: "bookings",
-    select:
-      "id, status, booked_at, customers(name), flights(flight_number, origin, destination, departure_time)",
-    order: { column: "booked_at", ascending: false },
-    head: ["#", "לקוח", "טיסה", "מסלול", "המראה", "סטטוס"],
-    search: (r, q) =>
-      `${r.customers?.name ?? ""} ${r.flights?.flight_number ?? ""}`.toLowerCase().includes(q),
-    row: (r) => `
-      <td class="num">${r.id}</td>
-      <td>${esc(r.customers?.name)}</td>
-      <td class="ltr">${esc(r.flights?.flight_number)}</td>
-      <td class="ltr">${esc(r.flights?.origin)} ← ${esc(r.flights?.destination)}</td>
-      <td>${fmtDate(r.flights?.departure_time)}</td>
-      <td><span class="pill ${esc(r.status)}">${STATUS_HE[r.status] ?? esc(r.status)}</span></td>`
-  },
-
-  passports: {
-    custom: true,
-    head: ["#", "לקוח", "אימייל", "דרכון"],
-    search: (r, q) => (r.name || "").toLowerCase().includes(q),
-    row: (r) => `
-      <td class="num">${r.id}</td>
-      <td>${esc(r.name)}</td>
-      <td class="ltr">${esc(r.email)}</td>
-      <td>${
-        r.path
-          ? `<button class="btn-inline" data-path="${esc(r.path)}">צפייה</button>`
-          : '<span class="dim">לא הועלה</span>'
-      }</td>`
-  },
-
-  // Customer screen: same rows, without the redundant own-name column.
-  myBookings: {
-    from: "bookings",
-    select:
-      "id, status, booked_at, flights(flight_number, origin, destination, departure_time, arrival_time)",
-    order: { column: "booked_at", ascending: false },
-    head: ["טיסה", "מסלול", "המראה", "נחיתה", "סטטוס"],
-    search: () => true,
-    row: (r) => `
-      <td class="ltr">${esc(r.flights?.flight_number)}</td>
-      <td class="ltr">${esc(r.flights?.origin)} ← ${esc(r.flights?.destination)}</td>
-      <td>${fmtDate(r.flights?.departure_time)}</td>
-      <td>${fmtDate(r.flights?.arrival_time)}</td>
-      <td><span class="pill ${esc(r.status)}">${STATUS_HE[r.status] ?? esc(r.status)}</span></td>`
-  }
-};
-
-/* ---------- data ---------- */
-
-function render() {
-  const view = VIEWS[state.view];
-  const q = state.search.trim().toLowerCase();
-  const rows = q ? state.rows.filter((r) => view.search(r, q)) : state.rows;
-
-  el("thead").innerHTML = `<tr>${view.head.map((h) => `<th>${h}</th>`).join("")}</tr>`;
-  el("tbody").innerHTML = rows.map((r) => `<tr>${view.row(r)}</tr>`).join("");
-  if (state.isAdmin) el("count").textContent = rows.length ? `${rows.length} רשומות` : "";
-
-  const empty = el("empty");
-  empty.hidden = rows.length > 0;
-  if (!rows.length) empty.textContent = q ? "אין תוצאות לחיפוש" : "אין נתונים להצגה";
+function startClock() {
+  const tick = () => {
+    el("board-clock").textContent = new Date().toLocaleTimeString("he-IL", {
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+  };
+  tick();
+  clearInterval(clockTimer);
+  clockTimer = setInterval(tick, 1000);
 }
 
-async function load() {
-  const view = VIEWS[state.view];
-  el("tbody").innerHTML = "";
-  el("empty").hidden = true;
-
-  if (view.custom) {
-    state.rows = await loadPassportTable();
-    el("conn").textContent = "מחובר";
-    el("conn").className = "badge ok";
-    render();
-    return;
-  }
-
-  const { data, error } = await db
-    .from(view.from)
-    .select(view.select)
-    .order(view.order.column, { ascending: view.order.ascending ?? true });
-
-  if (error) {
-    el("conn").textContent = "שגיאה";
-    el("conn").className = "badge bad";
-    showAlert(`<b>שגיאה בשליפה מ־${view.from}:</b> ${esc(error.message)}`, true);
-    return;
-  }
-
-  el("conn").textContent = "מחובר";
-  el("conn").className = "badge ok";
-  state.rows = data;
-  render();
+function boardRow(f, extra, i) {
+  const d = document.createElement("div");
+  d.className = "board-row";
+  // stagger the flap-in so the board fills the way a real one does
+  d.style.animationDelay = `${Math.min(i * 45, 900)}ms`;
+  d.innerHTML = `
+    <span class="b-flight">${esc(f.flight_number)}</span>
+    <span class="b-code">${esc(f.origin)}</span>
+    <span class="b-code">${esc(f.destination)}</span>
+    <span class="b-time">${fmtTime(f.departure_time)} <span class="b-date">${fmtDay(f.departure_time)}</span></span>
+    <span><span class="b-stat ${esc(extra.cls)}">${esc(extra.label)}</span></span>`;
+  return d;
 }
 
-async function loadStats() {
-  const count = (t) => db.from(t).select("*", { count: "exact", head: true });
+async function loadBoard() {
+  const seq = ++boardSeq;
+  const rows = el("board-rows");
+  let items = [];
 
-  const [c, f, b, ok] = await Promise.all([
-    count("customers"),
-    count("flights"),
-    count("bookings"),
-    db.from("bookings").select("*", { count: "exact", head: true }).eq("status", "confirmed")
-  ]);
+  if (state.isAdmin) {
+    el("board-title").textContent = "לוח טיסות — כל הטיסות";
+    el("board-col5").textContent = "הזמנות";
 
-  el("stat-customers").textContent = c.count ?? "—";
-  el("stat-flights").textContent   = f.count ?? "—";
-  el("stat-bookings").textContent  = b.count ?? "—";
-  el("stat-confirmed").textContent = ok.count ?? "—";
+    const [flights, bookings] = await Promise.all([
+      db.from("flights")
+        .select("id, flight_number, origin, destination, departure_time")
+        .order("departure_time"),
+      db.from("bookings").select("flight_id")
+    ]);
+
+    if (seq !== boardSeq) return;
+    if (flights.error) {
+      showAlert(`<b>שגיאה בטעינת הלוח:</b> ${esc(flights.error.message)}`, true);
+      return;
+    }
+
+    const perFlight = {};
+    (bookings.data || []).forEach((b) => {
+      perFlight[b.flight_id] = (perFlight[b.flight_id] || 0) + 1;
+    });
+
+    items = (flights.data || []).map((f) => ({
+      f,
+      extra: { cls: "seats", label: `${perFlight[f.id] || 0} מוזמנים` }
+    }));
+  } else {
+    el("board-title").textContent = "הטיסות שלי";
+    el("board-col5").textContent = "סטטוס";
+
+    const { data, error } = await db
+      .from("bookings")
+      .select("status, flights(flight_number, origin, destination, departure_time)")
+      .order("booked_at", { ascending: false });
+
+    if (seq !== boardSeq) return;
+    if (error) {
+      showAlert(`<b>שגיאה בטעינת הלוח:</b> ${esc(error.message)}`, true);
+      return;
+    }
+
+    items = (data || [])
+      .filter((b) => b.flights)
+      .map((b) => ({
+        f: b.flights,
+        extra: { cls: b.status, label: STATUS_HE[b.status] ?? b.status }
+      }));
+  }
+
+  if (seq !== boardSeq) return;
+
+  // Build detached, then swap in one go, so the list is never half-written.
+  const frag = document.createDocumentFragment();
+  items.forEach(({ f, extra }, i) => frag.appendChild(boardRow(f, extra, i)));
+
+  rows.replaceChildren(frag);
+  el("board-empty").hidden = items.length > 0;
 }
-
 
 /* ---------- passport storage ---------- */
 
@@ -293,6 +257,69 @@ async function uploadPassport(session) {
   refreshPassport(session);
 }
 
+/* ---------- admin tables ---------- */
+
+const VIEWS = {
+  customers: {
+    from: "customers",
+    select: "id, name, email",
+    order: { column: "id" },
+    head: ["#", "שם", "אימייל"],
+    search: (r, q) =>
+      (r.name || "").toLowerCase().includes(q) || (r.email || "").toLowerCase().includes(q),
+    row: (r) => `
+      <td class="num">${r.id}</td>
+      <td>${esc(r.name)}</td>
+      <td class="ltr">${r.email ? esc(r.email) : '<span class="dim">—</span>'}</td>`
+  },
+
+  flights: {
+    from: "flights",
+    select: "id, flight_number, origin, destination, departure_time, arrival_time",
+    order: { column: "departure_time" },
+    head: ["טיסה", "מסלול", "המראה", "נחיתה"],
+    search: (r, q) =>
+      `${r.flight_number} ${r.origin} ${r.destination}`.toLowerCase().includes(q),
+    row: (r) => `
+      <td class="ltr">${esc(r.flight_number)}</td>
+      <td class="ltr">${esc(r.origin)} ← ${esc(r.destination)}</td>
+      <td>${fmtDate(r.departure_time)}</td>
+      <td>${fmtDate(r.arrival_time)}</td>`
+  },
+
+  bookings: {
+    from: "bookings",
+    select:
+      "id, status, booked_at, customers(name), flights(flight_number, origin, destination, departure_time)",
+    order: { column: "booked_at", ascending: false },
+    head: ["#", "לקוח", "טיסה", "מסלול", "המראה", "סטטוס"],
+    search: (r, q) =>
+      `${r.customers?.name ?? ""} ${r.flights?.flight_number ?? ""}`.toLowerCase().includes(q),
+    row: (r) => `
+      <td class="num">${r.id}</td>
+      <td>${esc(r.customers?.name)}</td>
+      <td class="ltr">${esc(r.flights?.flight_number)}</td>
+      <td class="ltr">${esc(r.flights?.origin)} ← ${esc(r.flights?.destination)}</td>
+      <td>${fmtDate(r.flights?.departure_time)}</td>
+      <td><span class="pill ${esc(r.status)}">${STATUS_HE[r.status] ?? esc(r.status)}</span></td>`
+  },
+
+  passports: {
+    custom: true,
+    head: ["#", "לקוח", "אימייל", "דרכון"],
+    search: (r, q) => (r.name || "").toLowerCase().includes(q),
+    row: (r) => `
+      <td class="num">${r.id}</td>
+      <td>${esc(r.name)}</td>
+      <td class="ltr">${esc(r.email)}</td>
+      <td>${
+        r.path
+          ? `<button class="btn-inline" data-path="${esc(r.path)}">צפייה</button>`
+          : '<span class="dim">לא הועלה</span>'
+      }</td>`
+  }
+};
+
 /* Admin view: one folder listing per linked customer. Fine at this scale;
    with thousands of customers this wants a passport_path column instead. */
 async function loadPassportTable() {
@@ -319,6 +346,61 @@ async function openPassport(e) {
   if (url) window.open(url, "_blank", "noopener");
 }
 
+function render() {
+  const view = VIEWS[state.view];
+  const q = state.search.trim().toLowerCase();
+  const rows = q ? state.rows.filter((r) => view.search(r, q)) : state.rows;
+
+  el("thead").innerHTML = `<tr>${view.head.map((h) => `<th>${h}</th>`).join("")}</tr>`;
+  el("tbody").innerHTML = rows.map((r) => `<tr>${view.row(r)}</tr>`).join("");
+  el("count").textContent = rows.length ? `${rows.length} רשומות` : "";
+
+  const empty = el("empty");
+  empty.hidden = rows.length > 0;
+  if (!rows.length) empty.textContent = q ? "אין תוצאות לחיפוש" : "אין נתונים להצגה";
+}
+
+async function load() {
+  const view = VIEWS[state.view];
+  el("tbody").innerHTML = "";
+  el("empty").hidden = true;
+
+  if (view.custom) {
+    state.rows = await loadPassportTable();
+    render();
+    return;
+  }
+
+  const { data, error } = await db
+    .from(view.from)
+    .select(view.select)
+    .order(view.order.column, { ascending: view.order.ascending ?? true });
+
+  if (error) {
+    showAlert(`<b>שגיאה בשליפה מ־${view.from}:</b> ${esc(error.message)}`, true);
+    return;
+  }
+
+  state.rows = data;
+  render();
+}
+
+async function loadStats() {
+  const count = (t) => db.from(t).select("*", { count: "exact", head: true });
+
+  const [c, f, b, ok] = await Promise.all([
+    count("customers"),
+    count("flights"),
+    count("bookings"),
+    db.from("bookings").select("*", { count: "exact", head: true }).eq("status", "confirmed")
+  ]);
+
+  el("stat-customers").textContent = c.count ?? "—";
+  el("stat-flights").textContent   = f.count ?? "—";
+  el("stat-bookings").textContent  = b.count ?? "—";
+  el("stat-confirmed").textContent = ok.count ?? "—";
+}
+
 /* ---------- session routing ---------- */
 
 function showApp(session) {
@@ -333,27 +415,30 @@ function showApp(session) {
   tag.textContent = state.isAdmin ? "מנהל" : "לקוח";
   tag.classList.toggle("customer", !state.isAdmin);
 
-  el("admin-panel").hidden = !state.isAdmin;
+  el("stats").hidden         = !state.isAdmin;
+  el("admin-panel").hidden   = !state.isAdmin;
+  el("table-wrap").hidden    = !state.isAdmin;
   el("customer-panel").hidden = state.isAdmin;
+
+  startClock();
+  loadBoard();
 
   if (state.isAdmin) {
     state.view = "customers";
     loadStats();
+    load();
   } else {
-    state.view = "myBookings";
-    el("customer-greeting").textContent =
-      "מוצגות ההזמנות והמסמכים המשויכים לחשבון שלך בלבד.";
+    // The board already lists this customer's flights, so no table below it.
     refreshPassport(session);
     el("passport-file").onchange = (e) => {
       el("passport-upload").disabled = !e.target.files.length;
     };
     el("passport-upload").onclick = () => uploadPassport(session);
   }
-
-  load();
 }
 
 function showGate() {
+  clearInterval(clockTimer);
   el("app").hidden = true;
   el("gate").hidden = false;
   el("login-form").reset();

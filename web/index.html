@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>CRM טיסות</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,8 +14,14 @@
   <!-- ===== login ===== -->
   <div class="gate" id="gate" hidden>
     <form class="card" id="login-form">
-      <h2>CRM טיסות</h2>
-      <p class="card-sub">התחברות נדרשת לצפייה בנתונים</p>
+      <div class="card-glow"></div>
+      <div class="brand">
+        <span class="brand-mark">✈</span>
+        <div>
+          <h2>CRM טיסות</h2>
+          <p class="card-sub">מערכת ניהול הזמנות</p>
+        </div>
+      </div>
 
       <label for="email">אימייל</label>
       <input type="email" id="email" required autocomplete="username" dir="ltr">
@@ -21,7 +30,7 @@
       <input type="password" id="password" required autocomplete="current-password" dir="ltr">
 
       <p class="form-msg" id="login-msg" hidden></p>
-      <button type="submit" class="btn" id="login-btn">כניסה</button>
+      <button type="submit" class="btn" id="login-btn">כניסה למערכת</button>
     </form>
   </div>
 
@@ -30,10 +39,12 @@
 
     <header class="topbar">
       <div class="wrap">
-        <h1>CRM טיסות</h1>
+        <div class="brand brand-sm">
+          <span class="brand-mark">✈</span>
+          <h1>CRM טיסות</h1>
+        </div>
         <div class="topbar-end">
           <span class="role-tag" id="role-tag"></span>
-          <span class="badge" id="conn">טוען…</span>
           <span class="user" id="user-email"></span>
           <button class="btn-link" id="logout-btn">יציאה</button>
         </div>
@@ -42,15 +53,66 @@
 
     <main class="wrap">
 
-      <!-- admin only -->
-      <section id="admin-panel" hidden>
-        <section class="stats">
-          <div class="stat"><span class="stat-num" id="stat-customers">—</span><span class="stat-label">לקוחות</span></div>
-          <div class="stat"><span class="stat-num" id="stat-flights">—</span><span class="stat-label">טיסות</span></div>
-          <div class="stat"><span class="stat-num" id="stat-bookings">—</span><span class="stat-label">הזמנות</span></div>
-          <div class="stat"><span class="stat-num" id="stat-confirmed">—</span><span class="stat-label">מאושרות</span></div>
-        </section>
+      <!-- ===== the digital board: centrepiece ===== -->
+      <section class="board">
+        <div class="board-bar">
+          <div class="board-id">
+            <span class="live-dot"></span>
+            <h2 id="board-title">לוח טיסות</h2>
+          </div>
+          <time class="board-clock" id="board-clock">--:--:--</time>
+        </div>
 
+        <div class="board-head">
+          <span>טיסה</span>
+          <span>מוצא</span>
+          <span>יעד</span>
+          <span>המראה</span>
+          <span id="board-col5">סטטוס</span>
+        </div>
+
+        <div class="board-rows" id="board-rows"></div>
+        <p class="board-empty" id="board-empty" hidden>אין טיסות להצגה</p>
+      </section>
+
+      <section class="stats" id="stats" hidden>
+        <div class="stat s-cyan">
+          <span class="stat-label">לקוחות</span>
+          <span class="stat-num" id="stat-customers">—</span>
+        </div>
+        <div class="stat s-violet">
+          <span class="stat-label">טיסות</span>
+          <span class="stat-num" id="stat-flights">—</span>
+        </div>
+        <div class="stat s-amber">
+          <span class="stat-label">הזמנות</span>
+          <span class="stat-num" id="stat-bookings">—</span>
+        </div>
+        <div class="stat s-emerald">
+          <span class="stat-label">מאושרות</span>
+          <span class="stat-num" id="stat-confirmed">—</span>
+        </div>
+      </section>
+
+      <!-- customer document card -->
+      <section id="customer-panel" hidden>
+        <section class="doc-card">
+          <div class="doc-head">
+            <div>
+              <h3>דרכון</h3>
+              <p class="doc-status" id="passport-status">בודק…</p>
+            </div>
+            <a class="btn-link" id="passport-view" hidden target="_blank" rel="noopener">צפייה</a>
+          </div>
+          <input type="file" id="passport-file" accept="image/jpeg,image/png,application/pdf">
+          <button class="btn btn-sm" id="passport-upload" disabled>העלאה</button>
+          <p class="doc-note">JPG, PNG או PDF · עד 5MB · נגיש לך ולצוות בלבד</p>
+          <p class="form-msg" id="passport-msg" hidden></p>
+        </section>
+      </section>
+
+      <!-- admin tables -->
+      <section id="admin-panel" hidden>
         <nav class="tabs" role="tablist">
           <button class="tab is-active" data-view="customers" role="tab">לקוחות</button>
           <button class="tab" data-view="flights"   role="tab">טיסות</button>
@@ -64,30 +126,9 @@
         </div>
       </section>
 
-      <!-- customer only -->
-      <section id="customer-panel" hidden>
-        <h2 class="page-title">ההזמנות שלי</h2>
-        <p class="page-sub" id="customer-greeting"></p>
-
-        <section class="doc-card">
-          <div class="doc-head">
-            <div>
-              <h3>דרכון</h3>
-              <p class="doc-status" id="passport-status">בודק…</p>
-            </div>
-            <a class="btn-link" id="passport-view" hidden target="_blank" rel="noopener">צפייה</a>
-          </div>
-
-          <input type="file" id="passport-file" accept="image/jpeg,image/png,application/pdf">
-          <button class="btn" id="passport-upload" disabled>העלאה</button>
-          <p class="doc-note">JPG, PNG או PDF · עד 5MB · נגיש לך ולצוות בלבד</p>
-          <p class="form-msg" id="passport-msg" hidden></p>
-        </section>
-      </section>
-
       <div id="alert" class="alert" hidden></div>
 
-      <div class="table-scroll">
+      <div class="table-scroll" id="table-wrap" hidden>
         <table>
           <thead id="thead"></thead>
           <tbody id="tbody"></tbody>
