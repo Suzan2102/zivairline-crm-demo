@@ -55,6 +55,7 @@
           <button class="tab is-active" data-view="customers" role="tab">לקוחות</button>
           <button class="tab" data-view="flights"   role="tab">טיסות</button>
           <button class="tab" data-view="bookings"  role="tab">הזמנות</button>
+          <button class="tab" data-view="passports" role="tab">דרכונים</button>
         </nav>
 
         <div class="toolbar">
@@ -67,6 +68,21 @@
       <section id="customer-panel" hidden>
         <h2 class="page-title">ההזמנות שלי</h2>
         <p class="page-sub" id="customer-greeting"></p>
+
+        <section class="doc-card">
+          <div class="doc-head">
+            <div>
+              <h3>דרכון</h3>
+              <p class="doc-status" id="passport-status">בודק…</p>
+            </div>
+            <a class="btn-link" id="passport-view" hidden target="_blank" rel="noopener">צפייה</a>
+          </div>
+
+          <input type="file" id="passport-file" accept="image/jpeg,image/png,application/pdf">
+          <button class="btn" id="passport-upload" disabled>העלאה</button>
+          <p class="doc-note">JPG, PNG או PDF · עד 5MB · נגיש לך ולצוות בלבד</p>
+          <p class="form-msg" id="passport-msg" hidden></p>
+        </section>
       </section>
 
       <div id="alert" class="alert" hidden></div>

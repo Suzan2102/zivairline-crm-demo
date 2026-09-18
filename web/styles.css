@@ -192,3 +192,33 @@ td.ltr { direction: ltr; text-align: right; }
 
 .page-title { font-size: 20px; margin: 0 0 4px; font-weight: 650; }
 .page-sub   { font-size: 13.5px; color: var(--muted); margin: 0 0 20px; }
+
+/* ---------- document upload ---------- */
+.doc-card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px; margin-bottom: 24px;
+}
+.doc-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; margin-bottom: 16px;
+}
+.doc-head h3 { margin: 0 0 3px; font-size: 15px; font-weight: 650; }
+.doc-status { margin: 0; font-size: 13px; color: var(--muted); }
+.doc-status.has { color: var(--ok-fg); }
+.doc-head .btn-link { width: auto; padding: 0; white-space: nowrap; }
+
+.doc-card input[type="file"] {
+  font: inherit; font-size: 13px; width: 100%;
+  padding: 9px; margin-bottom: 12px;
+  border: 1px dashed var(--border); border-radius: 8px;
+  background: var(--bg); color: var(--text);
+}
+.doc-card .btn { width: auto; padding: 9px 22px; }
+.doc-note { font-size: 12px; color: var(--muted); margin: 12px 0 0; }
+.doc-card .form-msg { margin: 12px 0 0; }
+
+.btn-inline {
+  font: inherit; font-size: 13px; cursor: pointer;
+  background: none; border: 0; color: var(--accent); padding: 0;
+}
+.btn-inline:hover { text-decoration: underline; }

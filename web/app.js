@@ -108,6 +108,21 @@ const VIEWS = {
       <td><span class="pill ${esc(r.status)}">${STATUS_HE[r.status] ?? esc(r.status)}</span></td>`
   },
 
+  passports: {
+    custom: true,
+    head: ["#", "לקוח", "אימייל", "דרכון"],
+    search: (r, q) => (r.name || "").toLowerCase().includes(q),
+    row: (r) => `
+      <td class="num">${r.id}</td>
+      <td>${esc(r.name)}</td>
+      <td class="ltr">${esc(r.email)}</td>
+      <td>${
+        r.path
+          ? `<button class="btn-inline" data-path="${esc(r.path)}">צפייה</button>`
+          : '<span class="dim">לא הועלה</span>'
+      }</td>`
+  },
+
   // Customer screen: same rows, without the redundant own-name column.
   myBookings: {
     from: "bookings",
@@ -146,6 +161,14 @@ async function load() {
   el("tbody").innerHTML = "";
   el("empty").hidden = true;
 
+  if (view.custom) {
+    state.rows = await loadPassportTable();
+    el("conn").textContent = "מחובר";
+    el("conn").className = "badge ok";
+    render();
+    return;
+  }
+
   const { data, error } = await db
     .from(view.from)
     .select(view.select)
@@ -180,6 +203,122 @@ async function loadStats() {
   el("stat-confirmed").textContent = ok.count ?? "—";
 }
 
+
+/* ---------- passport storage ---------- */
+
+const BUCKET = "passports";
+
+/* The first path segment is the owner check enforced by the storage policies,
+   so it has to be the uid. A filename the user picks never touches it. */
+const folderFor = (session) => session.user.id;
+
+async function findPassport(uid) {
+  const { data, error } = await db.storage.from(BUCKET).list(uid, { limit: 1 });
+  if (error || !data?.length) return null;
+  return `${uid}/${data[0].name}`;
+}
+
+/* The bucket is private, so there is no permanent URL to hand out. A signed
+   URL is minted per view and expires in 60s. */
+async function signedUrl(path) {
+  const { data, error } = await db.storage.from(BUCKET).createSignedUrl(path, 60);
+  return error ? null : data.signedUrl;
+}
+
+function passportMsg(text, ok = false) {
+  const m = el("passport-msg");
+  m.textContent = text;
+  m.classList.toggle("ok", ok);
+  m.hidden = !text;
+}
+
+async function refreshPassport(session) {
+  const path = await findPassport(folderFor(session));
+  const status = el("passport-status");
+  const view = el("passport-view");
+
+  if (!path) {
+    status.textContent = "טרם הועלה";
+    status.classList.remove("has");
+    view.hidden = true;
+    el("passport-upload").textContent = "העלאה";
+    return;
+  }
+
+  status.textContent = "הועלה";
+  status.classList.add("has");
+  el("passport-upload").textContent = "החלפה";
+
+  const url = await signedUrl(path);
+  if (url) {
+    view.href = url;
+    view.hidden = false;
+  }
+}
+
+async function uploadPassport(session) {
+  const file = el("passport-file").files[0];
+  if (!file) return;
+
+  const btn = el("passport-upload");
+  btn.disabled = true;
+  passportMsg("");
+
+  const uid = folderFor(session);
+  const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+
+  // Remove whatever is there first, otherwise a jpg replacing a png leaves
+  // two files in the folder and the list order decides which one wins.
+  const existing = await findPassport(uid);
+  if (existing) await db.storage.from(BUCKET).remove([existing]);
+
+  const { error } = await db.storage
+    .from(BUCKET)
+    .upload(`${uid}/passport.${ext}`, file, { upsert: true, contentType: file.type });
+
+  btn.disabled = false;
+
+  if (error) {
+    // The bucket caps size and mime type, so these are the usual rejections.
+    passportMsg(
+      /exceeded|too large/i.test(error.message) ? "הקובץ גדול מ־5MB"
+      : /mime|type/i.test(error.message)        ? "סוג קובץ לא נתמך"
+      : error.message
+    );
+    return;
+  }
+
+  el("passport-file").value = "";
+  passportMsg("הדרכון הועלה", true);
+  refreshPassport(session);
+}
+
+/* Admin view: one folder listing per linked customer. Fine at this scale;
+   with thousands of customers this wants a passport_path column instead. */
+async function loadPassportTable() {
+  const { data: customers, error } = await db
+    .from("customers")
+    .select("id, name, email, user_id")
+    .not("user_id", "is", null)
+    .order("id");
+
+  if (error) {
+    showAlert(`<b>שגיאה:</b> ${esc(error.message)}`, true);
+    return [];
+  }
+
+  return Promise.all(
+    customers.map(async (c) => ({ ...c, path: await findPassport(c.user_id) }))
+  );
+}
+
+async function openPassport(e) {
+  const path = e.target.dataset.path;
+  if (!path) return;
+  const url = await signedUrl(path);
+  if (url) window.open(url, "_blank", "noopener");
+}
+
 /* ---------- session routing ---------- */
 
 function showApp(session) {
@@ -202,7 +341,12 @@ function showApp(session) {
   } else {
     state.view = "myBookings";
     el("customer-greeting").textContent =
-      "מוצגות ההזמנות המשויכות לחשבון שלך בלבד.";
+      "מוצגות ההזמנות והמסמכים המשויכים לחשבון שלך בלבד.";
+    refreshPassport(session);
+    el("passport-file").onchange = (e) => {
+      el("passport-upload").disabled = !e.target.files.length;
+    };
+    el("passport-upload").onclick = () => uploadPassport(session);
   }
 
   load();
@@ -233,6 +377,10 @@ document.querySelectorAll(".tab").forEach((tab) => {
     el("search").value = "";
     load();
   });
+});
+
+el("tbody").addEventListener("click", (e) => {
+  if (e.target.matches("[data-path]")) openPassport(e);
 });
 
 el("search").addEventListener("input", (e) => {
