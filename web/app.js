@@ -2,7 +2,7 @@ const { url, key } = window.SUPABASE_CONFIG;
 const db = window.supabase.createClient(url, key);
 
 const el = (id) => document.getElementById(id);
-const state = { view: "customers", rows: [], search: "" };
+const state = { view: "customers", rows: [], search: "", isAdmin: false };
 
 /* ---------- helpers ---------- */
 
@@ -30,6 +30,12 @@ function formMsg(text, ok = false) {
   m.hidden = !text;
 }
 
+/* The role is read from app_metadata, which only the auth server can write.
+   This drives which screen renders — it is not a security boundary. The real
+   enforcement is in the RLS policies, so a user who tampers with this in
+   devtools still gets nothing back from the database. */
+const isAdmin = (session) => session?.user?.app_metadata?.role === "admin";
+
 /* ---------- auth ---------- */
 
 async function signIn(e) {
@@ -45,42 +51,15 @@ async function signIn(e) {
   el("login-btn").disabled = false;
 
   if (error) {
-    // Supabase returns the same message for a wrong password and an unknown
-    // address, on purpose: it stops the form being used to discover which
-    // addresses have accounts.
     formMsg(
       error.message === "Invalid login credentials"
         ? "אימייל או סיסמה שגויים"
         : error.message
     );
   }
-  // On success onAuthStateChange takes over.
 }
 
-async function signUp() {
-  formMsg("");
-  const email = el("email").value.trim();
-  const password = el("password").value;
-
-  if (!email || password.length < 6) {
-    formMsg("נדרש אימייל וסיסמה באורך 6 תווים לפחות");
-    return;
-  }
-
-  const { data, error } = await db.auth.signUp({ email, password });
-
-  if (error) {
-    formMsg(error.message);
-  } else if (data.session) {
-    formMsg("המשתמש נוצר, מתחבר…", true);
-  } else {
-    formMsg("המשתמש נוצר. יש לאשר את הכתובת במייל לפני הכניסה.", true);
-  }
-}
-
-async function signOut() {
-  await db.auth.signOut();
-}
+const signOut = () => db.auth.signOut();
 
 /* ---------- views ---------- */
 
@@ -112,13 +91,12 @@ const VIEWS = {
       <td>${fmtDate(r.arrival_time)}</td>`
   },
 
-  // The nested selects resolve through the foreign keys on bookings.
   bookings: {
     from: "bookings",
     select:
-      "id, status, booked_at, customers(name), flights(flight_number, origin, destination)",
+      "id, status, booked_at, customers(name), flights(flight_number, origin, destination, departure_time)",
     order: { column: "booked_at", ascending: false },
-    head: ["#", "לקוח", "טיסה", "מסלול", "סטטוס", "הוזמן"],
+    head: ["#", "לקוח", "טיסה", "מסלול", "המראה", "סטטוס"],
     search: (r, q) =>
       `${r.customers?.name ?? ""} ${r.flights?.flight_number ?? ""}`.toLowerCase().includes(q),
     row: (r) => `
@@ -126,8 +104,24 @@ const VIEWS = {
       <td>${esc(r.customers?.name)}</td>
       <td class="ltr">${esc(r.flights?.flight_number)}</td>
       <td class="ltr">${esc(r.flights?.origin)} ← ${esc(r.flights?.destination)}</td>
-      <td><span class="pill ${esc(r.status)}">${STATUS_HE[r.status] ?? esc(r.status)}</span></td>
-      <td class="dim">${fmtDate(r.booked_at)}</td>`
+      <td>${fmtDate(r.flights?.departure_time)}</td>
+      <td><span class="pill ${esc(r.status)}">${STATUS_HE[r.status] ?? esc(r.status)}</span></td>`
+  },
+
+  // Customer screen: same rows, without the redundant own-name column.
+  myBookings: {
+    from: "bookings",
+    select:
+      "id, status, booked_at, flights(flight_number, origin, destination, departure_time, arrival_time)",
+    order: { column: "booked_at", ascending: false },
+    head: ["טיסה", "מסלול", "המראה", "נחיתה", "סטטוס"],
+    search: () => true,
+    row: (r) => `
+      <td class="ltr">${esc(r.flights?.flight_number)}</td>
+      <td class="ltr">${esc(r.flights?.origin)} ← ${esc(r.flights?.destination)}</td>
+      <td>${fmtDate(r.flights?.departure_time)}</td>
+      <td>${fmtDate(r.flights?.arrival_time)}</td>
+      <td><span class="pill ${esc(r.status)}">${STATUS_HE[r.status] ?? esc(r.status)}</span></td>`
   }
 };
 
@@ -140,7 +134,7 @@ function render() {
 
   el("thead").innerHTML = `<tr>${view.head.map((h) => `<th>${h}</th>`).join("")}</tr>`;
   el("tbody").innerHTML = rows.map((r) => `<tr>${view.row(r)}</tr>`).join("");
-  el("count").textContent = rows.length ? `${rows.length} רשומות` : "";
+  if (state.isAdmin) el("count").textContent = rows.length ? `${rows.length} רשומות` : "";
 
   const empty = el("empty");
   empty.hidden = rows.length > 0;
@@ -164,12 +158,14 @@ async function load() {
     return;
   }
 
+  el("conn").textContent = "מחובר";
+  el("conn").className = "badge ok";
   state.rows = data;
   render();
 }
 
 async function loadStats() {
-  const count = (table) => db.from(table).select("*", { count: "exact", head: true });
+  const count = (t) => db.from(t).select("*", { count: "exact", head: true });
 
   const [c, f, b, ok] = await Promise.all([
     count("customers"),
@@ -182,22 +178,6 @@ async function loadStats() {
   el("stat-flights").textContent   = f.count ?? "—";
   el("stat-bookings").textContent  = b.count ?? "—";
   el("stat-confirmed").textContent = ok.count ?? "—";
-
-  const badge = el("conn");
-
-  if (c.error) {
-    badge.textContent = "שגיאת הרשאה";
-    badge.className = "badge bad";
-    showAlert(
-      `<b>החיבור תקין אך הקריאה נדחתה:</b> ${esc(c.error.message)}<br>
-       המשתמש מחובר אך ה־policy אינו מתיר לו קריאה.`,
-      true
-    );
-  } else {
-    badge.textContent = "מחובר";
-    badge.className = "badge ok";
-    el("alert").hidden = true;
-  }
 }
 
 /* ---------- session routing ---------- */
@@ -206,7 +186,25 @@ function showApp(session) {
   el("gate").hidden = true;
   el("app").hidden = false;
   el("user-email").textContent = session.user.email;
-  loadStats();
+
+  state.isAdmin = isAdmin(session);
+
+  const tag = el("role-tag");
+  tag.textContent = state.isAdmin ? "מנהל" : "לקוח";
+  tag.classList.toggle("customer", !state.isAdmin);
+
+  el("admin-panel").hidden = !state.isAdmin;
+  el("customer-panel").hidden = state.isAdmin;
+
+  if (state.isAdmin) {
+    state.view = "customers";
+    loadStats();
+  } else {
+    state.view = "myBookings";
+    el("customer-greeting").textContent =
+      "מוצגות ההזמנות המשויכות לחשבון שלך בלבד.";
+  }
+
   load();
 }
 
@@ -217,14 +215,13 @@ function showGate() {
   formMsg("");
 }
 
-db.auth.onAuthStateChange((_event, session) => {
-  session ? showApp(session) : showGate();
-});
+db.auth.onAuthStateChange((_event, session) =>
+  session ? showApp(session) : showGate()
+);
 
 /* ---------- events ---------- */
 
 el("login-form").addEventListener("submit", signIn);
-el("signup-btn").addEventListener("click", signUp);
 el("logout-btn").addEventListener("click", signOut);
 
 document.querySelectorAll(".tab").forEach((tab) => {
@@ -243,6 +240,6 @@ el("search").addEventListener("input", (e) => {
   render();
 });
 
-/* Decide which screen to show once, on load. onAuthStateChange handles the
-   rest, including the token refresh that restores a session after a reload. */
-db.auth.getSession().then(({ data }) => (data.session ? showApp(data.session) : showGate()));
+db.auth.getSession().then(({ data }) =>
+  data.session ? showApp(data.session) : showGate()
+);

@@ -8,7 +8,7 @@
 </head>
 <body>
 
-  <!-- ===== login gate ===== -->
+  <!-- ===== login ===== -->
   <div class="gate" id="gate" hidden>
     <form class="card" id="login-form">
       <h2>CRM טיסות</h2>
@@ -21,9 +21,7 @@
       <input type="password" id="password" required autocomplete="current-password" dir="ltr">
 
       <p class="form-msg" id="login-msg" hidden></p>
-
       <button type="submit" class="btn" id="login-btn">כניסה</button>
-      <button type="button" class="btn-link" id="signup-btn">יצירת משתמש חדש</button>
     </form>
   </div>
 
@@ -34,7 +32,8 @@
       <div class="wrap">
         <h1>CRM טיסות</h1>
         <div class="topbar-end">
-          <span class="badge" id="conn">מתחבר…</span>
+          <span class="role-tag" id="role-tag"></span>
+          <span class="badge" id="conn">טוען…</span>
           <span class="user" id="user-email"></span>
           <button class="btn-link" id="logout-btn">יציאה</button>
         </div>
@@ -43,25 +42,34 @@
 
     <main class="wrap">
 
-      <section class="stats">
-        <div class="stat"><span class="stat-num" id="stat-customers">—</span><span class="stat-label">לקוחות</span></div>
-        <div class="stat"><span class="stat-num" id="stat-flights">—</span><span class="stat-label">טיסות</span></div>
-        <div class="stat"><span class="stat-num" id="stat-bookings">—</span><span class="stat-label">הזמנות</span></div>
-        <div class="stat"><span class="stat-num" id="stat-confirmed">—</span><span class="stat-label">מאושרות</span></div>
+      <!-- admin only -->
+      <section id="admin-panel" hidden>
+        <section class="stats">
+          <div class="stat"><span class="stat-num" id="stat-customers">—</span><span class="stat-label">לקוחות</span></div>
+          <div class="stat"><span class="stat-num" id="stat-flights">—</span><span class="stat-label">טיסות</span></div>
+          <div class="stat"><span class="stat-num" id="stat-bookings">—</span><span class="stat-label">הזמנות</span></div>
+          <div class="stat"><span class="stat-num" id="stat-confirmed">—</span><span class="stat-label">מאושרות</span></div>
+        </section>
+
+        <nav class="tabs" role="tablist">
+          <button class="tab is-active" data-view="customers" role="tab">לקוחות</button>
+          <button class="tab" data-view="flights"   role="tab">טיסות</button>
+          <button class="tab" data-view="bookings"  role="tab">הזמנות</button>
+        </nav>
+
+        <div class="toolbar">
+          <input type="search" id="search" placeholder="חיפוש…" autocomplete="off">
+          <span class="count" id="count"></span>
+        </div>
+      </section>
+
+      <!-- customer only -->
+      <section id="customer-panel" hidden>
+        <h2 class="page-title">ההזמנות שלי</h2>
+        <p class="page-sub" id="customer-greeting"></p>
       </section>
 
       <div id="alert" class="alert" hidden></div>
-
-      <nav class="tabs" role="tablist">
-        <button class="tab is-active" data-view="customers" role="tab">לקוחות</button>
-        <button class="tab" data-view="flights"   role="tab">טיסות</button>
-        <button class="tab" data-view="bookings"  role="tab">הזמנות</button>
-      </nav>
-
-      <div class="toolbar">
-        <input type="search" id="search" placeholder="חיפוש…" autocomplete="off">
-        <span class="count" id="count"></span>
-      </div>
 
       <div class="table-scroll">
         <table>
