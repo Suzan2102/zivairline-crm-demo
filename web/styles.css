@@ -28,6 +28,13 @@
 
 * { box-sizing: border-box; }
 
+/* An author rule that sets display -- .gate is display:flex -- outranks the
+   browser's own [hidden] { display: none }, so el.hidden = true would set the
+   attribute and change nothing on screen. This puts the attribute back in
+   charge for every element. */
+[hidden] { display: none !important; }
+
+
 body {
   margin: 0;
   background: var(--bg);

@@ -322,6 +322,7 @@ async function openPassport(e) {
 /* ---------- session routing ---------- */
 
 function showApp(session) {
+  formMsg("");
   el("gate").hidden = true;
   el("app").hidden = false;
   el("user-email").textContent = session.user.email;
